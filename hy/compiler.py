@@ -1127,21 +1127,21 @@ class HyASTCompiler(object):
 
     @builds(HyInteger)
     def compile_integer(self, number):
-        return ast.Num(n=int(number),
-                       lineno=number.start_line,
-                       col_offset=number.start_column)
+        return ([], ast.Num(n=int(number),
+                            lineno=number.start_line,
+                            col_offset=number.start_column))
 
     @builds(HyFloat)
     def compile_float(self, number):
-        return ast.Num(n=float(number),
-                       lineno=number.start_line,
-                       col_offset=number.start_column)
+        return ([], ast.Num(n=float(number),
+                            lineno=number.start_line,
+                            col_offset=number.start_column))
 
     @builds(HyComplex)
     def compile_complex(self, number):
-        return ast.Num(n=complex(number),
-                       lineno=number.start_line,
-                       col_offset=number.start_column)
+        return ([], ast.Num(n=complex(number),
+                            lineno=number.start_line,
+                            col_offset=number.start_column))
 
     @builds(HySymbol)
     def compile_symbol(self, symbol):
@@ -1149,30 +1149,31 @@ class HyASTCompiler(object):
             glob, local = symbol.rsplit(".", 1)
             glob = HySymbol(glob)
             glob.replace(symbol)
+            _, val = self.compile_symbol(glob)
 
-            return ast.Attribute(
+            return ([], ast.Attribute(
                 lineno=symbol.start_line,
                 col_offset=symbol.start_column,
-                value=self.compile_symbol(glob),
+                value=val,
                 attr=ast_str(local),
                 ctx=ast.Load()
-            )
+            ))
 
-        return ast.Name(id=ast_str(symbol),
-                        arg=ast_str(symbol),
-                        ctx=ast.Load(),
-                        lineno=symbol.start_line,
-                        col_offset=symbol.start_column)
+        return ([], ast.Name(id=ast_str(symbol),
+                             arg=ast_str(symbol),
+                             ctx=ast.Load(),
+                             lineno=symbol.start_line,
+                             col_offset=symbol.start_column))
 
     @builds(HyString)
     def compile_string(self, string):
-        return ast.Str(s=str_type(string), lineno=string.start_line,
-                       col_offset=string.start_column)
+        return ([], ast.Str(s=str_type(string), lineno=string.start_line,
+                            col_offset=string.start_column))
 
     @builds(HyKeyword)
     def compile_keyword(self, keyword):
-        return ast.Str(s=str_type(keyword), lineno=keyword.start_line,
-                       col_offset=keyword.start_column)
+        return ([], ast.Str(s=str_type(keyword), lineno=keyword.start_line,
+                            col_offset=keyword.start_column))
 
     @builds(HyDict)
     def compile_dict(self, m):
@@ -1182,11 +1183,9 @@ class HyASTCompiler(object):
             keys.append(self.compile(entry))
             vals.append(self.compile(m[entry]))
 
-        return ast.Dict(
-            lineno=m.start_line,
-            col_offset=m.start_column,
-            keys=keys,
-            values=vals)
+        return ([], ast.Dict(
+            lineno=m.start_line, col_offset=m.start_column,
+            keys=keys, values=vals))
 
 
 def hy_compile(tree, root=None):
