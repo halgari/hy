@@ -983,19 +983,20 @@ class HyASTCompiler(object):
 
             if expression[0].startswith("."):
                 return self.compile_dotted_expression(expression)
+
         if isinstance(fn, HyKeyword):
-            new_expr = HyExpression(["get", expression[1], fn])
-            new_expr.start_line = expression.start_line
-            new_expr.start_column = expression.start_column
+            new_expr = HyExpression([
+                "get", expression[1], fn
+            ]).replace(expression)
             return self.compile_index_expression(new_expr)
 
-        return ast.Call(func=self.compile(fn),
-                        args=[self.compile(x) for x in expression[1:]],
-                        keywords=[],
-                        starargs=None,
-                        kwargs=None,
-                        lineno=expression.start_line,
-                        col_offset=expression.start_column)
+        return ([], ast.Call(func=self.compile(fn),
+                             args=[self.compile(x) for x in expression[1:]],
+                             keywords=[],
+                             starargs=None,
+                             kwargs=None,
+                             lineno=expression.start_line,
+                             col_offset=expression.start_column))
 
     @builds("def")
     @builds("setf")
@@ -1072,11 +1073,11 @@ class HyASTCompiler(object):
 
     @builds(HyList)
     def compile_list(self, expr):
-        return ast.List(
+        return ([], ast.List(
             elts=[self.compile(x) for x in expr],
             ctx=ast.Load(),
             lineno=expr.start_line,
-            col_offset=expr.start_column)
+            col_offset=expr.start_column))
 
     @builds("fn")
     @checkargs(min=1)
