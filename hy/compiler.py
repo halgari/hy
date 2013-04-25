@@ -248,9 +248,17 @@ class HyASTCompiler(object):
 
         return args, defaults, varargs, kwargs
 
+    def _merge_list(self, entries):
+        stmts = []
+        expr = None
+        for entry in entries:
+            stmts_, expr = self.compile(entry)
+            stmts += stmts_
+        return (stmts, expr)
+
     @builds(list)
     def compile_raw_list(self, entries):
-        return [self.compile(x) for x in entries]
+        return self._merge_list(entries)
 
     def _render_quoted_form(self, form):
         name = form.__class__.__name__
@@ -278,29 +286,35 @@ class HyASTCompiler(object):
 
         return self.compile(HyExpression([
             HySymbol("hy_eval")] + expr + [
-                HyExpression([HySymbol("locals")])]).replace(expr))
+                HyExpression([HySymbol("locals")])]).replace(expr)))
 
     @builds("do")
     @builds("progn")
     def compile_do_expression(self, expr):
-        return [self.compile(x) for x in expr[1:]]
+        return self._merge_list([self.compile(x) for x in expr[1:]])
 
     @builds("throw")
     @builds("raise")
     @checkargs(max=1)
     def compile_throw_expression(self, expr):
         expr.pop(0)
-        exc = self.compile(expr.pop(0)) if expr else None
-        return ast.Raise(
+
+        stmts = []
+        exc = None
+        if expr:
+            stmts, exc = self.compile(expr.pop(0))
+
+        return (stmts, ast.Raise(
             lineno=expr.start_line,
             col_offset=expr.start_column,
             type=exc,
             exc=exc,
             inst=None,
-            tback=None)
+            tback=None))
 
     @builds("try")
     def compile_try_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # try
 
         try:
@@ -400,6 +414,7 @@ class HyASTCompiler(object):
     @builds("catch")
     @builds("except")
     def compile_catch_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         catch = expr.pop(0)  # catch
 
         try:
@@ -484,66 +499,82 @@ class HyASTCompiler(object):
     @checkargs(min=2, max=3)
     def compile_if_expression(self, expr):
         expr.pop(0)             # if
-        test = self.compile(expr.pop(0))
-        body = self._code_branch(self.compile(expr.pop(0)),
+        stmts, test = self.compile(expr.pop(0))
+
+        stmts_, branch = self.compile(expr.pop(0))
+        stmts += stmts_
+
+        body = self._code_branch(branch,
                                  expr.start_line,
                                  expr.start_column)
 
         if len(expr) == 1:
-            orel = self._code_branch(self.compile(expr.pop(0)),
+            stmts_, branch = self.compile(expr.pop(0))
+            stmts += stmts_
+            orel = self._code_branch(branch,
                                      expr.start_line,
                                      expr.start_column)
         else:
             orel = []
 
-        return ast.If(test=test,
-                      body=body,
-                      orelse=orel,
-                      lineno=expr.start_line,
-                      col_offset=expr.start_column)
+        return (stmts, ast.If(test=test,
+                              body=body,
+                              orelse=orel,
+                              lineno=expr.start_line,
+                              col_offset=expr.start_column))
 
     @builds("print")
     def compile_print_expression(self, expr):
         call = expr.pop(0)  # print
+        stmts = []
         if sys.version_info[0] >= 3:
-            call = self.compile(call)
+            stmts_, call = self.compile(call)
+            stmts += stmts_
+            stmts_, args = self._merge_list([self.compile(x) for x in expr])
+            stmts += stmts_
+
             # AST changed with Python 3, we now just call it.
-            return ast.Call(
+            return (stmts, ast.Call(
                 keywords=[],
                 func=call,
-                args=[self.compile(x) for x in expr],
+                args=args,
                 lineno=expr.start_line,
-                col_offset=expr.start_column)
+                col_offset=expr.start_column))
 
-        return ast.Print(
+        stmts_, values = self._merge_list([self.compile(x) for x in expr])
+        stmts += stmts_
+
+        return (stmts, ast.Print(
             lineno=expr.start_line,
             col_offset=expr.start_column,
             dest=None,
             values=[self.compile(x) for x in expr],
-            nl=True)
+            nl=True))
 
     @builds("assert")
     @checkargs(1)
     def compile_assert_expression(self, expr):
         expr.pop(0)  # assert
         e = expr.pop(0)
-        return ast.Assert(test=self.compile(e),
-                          msg=None,
-                          lineno=e.start_line,
-                          col_offset=e.start_column)
+        stmts, test = self.compile(e)
+        return (stmts, ast.Assert(test=test,
+                                  msg=None,
+                                  lineno=e.start_line,
+                                  col_offset=e.start_column))
 
     @builds("global")
     @checkargs(1)
     def compile_global_expression(self, expr):
         expr.pop(0)  # global
         e = expr.pop(0)
-        return ast.Global(names=[ast_str(e)],
-                          lineno=e.start_line,
-                          col_offset=e.start_column)
+        return ([], ast.Global(names=[ast_str(e)],
+                               lineno=e.start_line,
+                               col_offset=e.start_column))
 
     @builds("lambda")
     @checkargs(min=2)
     def compile_lambda_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)
         sig = expr.pop(0)
         body = expr.pop(0)
@@ -567,6 +598,7 @@ class HyASTCompiler(object):
     @builds("yield")
     @checkargs(max=1)
     def compile_yield_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)
         value = None
         if expr != []:
@@ -578,6 +610,7 @@ class HyASTCompiler(object):
 
     @builds("import")
     def compile_import_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         def _compile_import(expr, module, names=None, importer=ast.Import):
             return [
                 importer(
@@ -648,6 +681,7 @@ class HyASTCompiler(object):
     @builds("get")
     @checkargs(2)
     def compile_index_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # index
         val = self.compile(expr.pop(0))  # target
         sli = self.compile(expr.pop(0))  # slice
@@ -662,6 +696,7 @@ class HyASTCompiler(object):
     @builds("slice")
     @checkargs(min=1, max=3)
     def compile_slice_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # index
         val = self.compile(expr.pop(0))  # target
 
@@ -685,6 +720,7 @@ class HyASTCompiler(object):
     @builds("assoc")
     @checkargs(3)
     def compile_assoc_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # assoc
         # (assoc foo bar baz)  => foo[bar] = baz
         target = expr.pop(0)
@@ -706,6 +742,7 @@ class HyASTCompiler(object):
     @builds("decorate_with")
     @checkargs(min=1)
     def compile_decorate_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # decorate-with
         fn = self.compile(expr.pop(-1))
         if type(fn) != ast.FunctionDef:
@@ -716,6 +753,7 @@ class HyASTCompiler(object):
     @builds("with")
     @checkargs(min=2)
     def compile_with_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # with
 
         args = expr.pop(0)
@@ -745,6 +783,7 @@ class HyASTCompiler(object):
 
     @builds(",")
     def compile_tuple(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)
         return ast.Tuple(elts=[self.compile(x) for x in expr],
                          lineno=expr.start_line,
@@ -754,6 +793,7 @@ class HyASTCompiler(object):
     @builds("list_comp")
     @checkargs(min=2, max=3)
     def compile_list_comprehension(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         # (list-comp expr (target iter) cond?)
         expr.pop(0)
         expression = expr.pop(0)
@@ -789,6 +829,7 @@ class HyASTCompiler(object):
     @builds("kwapply")
     @checkargs(2)
     def compile_kwapply_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # kwapply
         call = self.compile(expr.pop(0))
         kwargs = expr.pop(0)
@@ -808,6 +849,7 @@ class HyASTCompiler(object):
     @builds("~")
     @checkargs(1)
     def compile_unary_operator(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         ops = {"not": ast.Not,
                "~": ast.Invert}
         operator = expression.pop(0)
@@ -844,6 +886,7 @@ class HyASTCompiler(object):
     @builds("not_in")
     @checkargs(min=2)
     def compile_compare_op_expression(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         ops = {"=": ast.Eq, "!=": ast.NotEq,
                "<": ast.Lt, "<=": ast.LtE,
                ">": ast.Gt, ">=": ast.GtE,
@@ -874,6 +917,7 @@ class HyASTCompiler(object):
     @builds("&")
     @checkargs(min=2)
     def compile_maths_expression(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         ops = {"+": ast.Add,
                "/": ast.Div,
                "//": ast.FloorDiv,
@@ -904,6 +948,7 @@ class HyASTCompiler(object):
     @builds("-")
     @checkargs(min=1)
     def compile_maths_expression_sub(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         if len(expression) > 2:
             return self.compile_maths_expression(expression)
         else:
@@ -927,6 +972,7 @@ class HyASTCompiler(object):
     @builds("&=")
     @checkargs(2)
     def compile_augassign_expression(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         ops = {"+=": ast.Add,
                "/=": ast.Div,
                "//=": ast.FloorDiv,
@@ -1003,6 +1049,7 @@ class HyASTCompiler(object):
     @builds("setv")
     @checkargs(2)
     def compile_def_expression(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         expression.pop(0)  # "def"
         name = expression.pop(0)
 
@@ -1025,6 +1072,7 @@ class HyASTCompiler(object):
     @builds("foreach")
     @checkargs(min=1)
     def compile_for_expression(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         with self.is_returnable(False):
             expression.pop(0)  # for
             name, iterable = expression.pop(0)
@@ -1059,6 +1107,7 @@ class HyASTCompiler(object):
     @builds("while")
     @checkargs(min=2)
     def compile_while_expression(self, expr):
+        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # "while"
         test = self.compile(expr.pop(0))
 
@@ -1082,6 +1131,7 @@ class HyASTCompiler(object):
     @builds("fn")
     @checkargs(min=1)
     def compile_fn_expression(self, expression):
+        # XXX: PAULTAG: MODERNIZE
         expression.pop(0)  # fn
 
         self.anon_fn_count += 1
