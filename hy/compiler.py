@@ -286,7 +286,7 @@ class HyASTCompiler(object):
 
         return self.compile(HyExpression([
             HySymbol("hy_eval")] + expr + [
-                HyExpression([HySymbol("locals")])]).replace(expr)))
+                HyExpression([HySymbol("locals")])]).replace(expr))
 
     @builds("do")
     @builds("progn")
@@ -575,11 +575,12 @@ class HyASTCompiler(object):
     @checkargs(min=2)
     def compile_lambda_expression(self, expr):
         # XXX: PAULTAG: MODERNIZE
-        expr.pop(0)
+        expr.pop(0)  # lambda
         sig = expr.pop(0)
         body = expr.pop(0)
-        # assert expr is empty
-        return ast.Lambda(
+        stmts, body = self.compile(body)
+
+        return (stmts, ast.Lambda(
             lineno=expr.start_line,
             col_offset=expr.start_column,
             args=ast.arguments(args=[
@@ -593,7 +594,7 @@ class HyASTCompiler(object):
                 defaults=[],
                 kwonlyargs=[],
                 kw_defaults=[]),
-            body=self.compile(body))
+            body=body))
 
     @builds("yield")
     @checkargs(max=1)
