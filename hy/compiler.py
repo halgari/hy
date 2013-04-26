@@ -598,15 +598,15 @@ class HyASTCompiler(object):
     @builds("yield")
     @checkargs(max=1)
     def compile_yield_expression(self, expr):
-        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)
         value = None
+        stmts = []
         if expr != []:
-            value = self.compile(expr.pop(0))
-        return ast.Yield(
+            stmts, value = self.compile(expr.pop(0))
+        return (stmts, ast.Yield(
             value=value,
             lineno=expr.start_line,
-            col_offset=expr.start_column)
+            col_offset=expr.start_column))
 
     @builds("import")
     def compile_import_expression(self, expr):
