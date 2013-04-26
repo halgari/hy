@@ -681,41 +681,42 @@ class HyASTCompiler(object):
     @builds("get")
     @checkargs(2)
     def compile_index_expression(self, expr):
-        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # index
-        val = self.compile(expr.pop(0))  # target
-        sli = self.compile(expr.pop(0))  # slice
+        stmts, val = self.compile(expr.pop(0))  # target
+        stmts_, sli = self.compile(expr.pop(0))  # slice
+        stmts += stmts_
 
-        return ast.Subscript(
+        return (stmts, ast.Subscript(
             lineno=expr.start_line,
             col_offset=expr.start_column,
             value=val,
             slice=ast.Index(value=sli),
-            ctx=ast.Load())
+            ctx=ast.Load()))
 
     @builds("slice")
     @checkargs(min=1, max=3)
     def compile_slice_expression(self, expr):
-        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # index
-        val = self.compile(expr.pop(0))  # target
+        stmts, val = self.compile(expr.pop(0))  # target
 
         low = None
         if expr != []:
-            low = self.compile(expr.pop(0))
+            stmts_, low = self.compile(expr.pop(0))
+            stmts += stmts_
 
         high = None
         if expr != []:
-            high = self.compile(expr.pop(0))
+            stmts_, high = self.compile(expr.pop(0))
+            stmts += stmts_
 
-        return ast.Subscript(
+        return (stmts, ast.Subscript(
             lineno=expr.start_line,
             col_offset=expr.start_column,
             value=val,
             slice=ast.Slice(lower=low,
                             upper=high,
                             step=None),
-            ctx=ast.Load())
+            ctx=ast.Load()))
 
     @builds("assoc")
     @checkargs(3)
