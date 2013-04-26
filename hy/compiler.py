@@ -574,7 +574,6 @@ class HyASTCompiler(object):
     @builds("lambda")
     @checkargs(min=2)
     def compile_lambda_expression(self, expr):
-        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # lambda
         sig = expr.pop(0)
         body = expr.pop(0)
