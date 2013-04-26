@@ -721,29 +721,36 @@ class HyASTCompiler(object):
     @builds("assoc")
     @checkargs(3)
     def compile_assoc_expression(self, expr):
-        # XXX: PAULTAG: MODERNIZE
         expr.pop(0)  # assoc
         # (assoc foo bar baz)  => foo[bar] = baz
-        target = expr.pop(0)
-        key = expr.pop(0)
-        val = expr.pop(0)
+        stmts, target = self.compile(expr.pop(0))
+        stmts_, key = self.compile(expr.pop(0))
+        stmts += stmts_
+        val = self.compile(expr.pop(0))
+        stmts += stmts_
 
-        return ast.Assign(
+        return (stmts, ast.Assign(
             lineno=expr.start_line,
             col_offset=expr.start_column,
             targets=[
                 ast.Subscript(
                     lineno=expr.start_line,
                     col_offset=expr.start_column,
-                    value=self.compile(target),
-                    slice=ast.Index(value=self.compile(key)),
+                    value=target,
+                    slice=ast.Index(value=key),
                     ctx=ast.Store())],
-            value=self.compile(val))
+            value=val))
 
     @builds("decorate_with")
     @checkargs(min=1)
     def compile_decorate_expression(self, expr):
         # XXX: PAULTAG: MODERNIZE
+        #
+        # Hey you! Yeah, you! Shmuck! This is non-trivial [so far], since
+        # we need to decorate the function we compile down below, which
+        # means we have to be careful about which stmt we use. Do this
+        # once you know what's going on.
+        #
         expr.pop(0)  # decorate-with
         fn = self.compile(expr.pop(-1))
         if type(fn) != ast.FunctionDef:
